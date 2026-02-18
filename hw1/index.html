@@ -23,6 +23,10 @@
 			body {
 				font-family: 'Inter', sans-serif;
 			}
+
+			@media print {
+				#MathJax_Message { display: none !important; }
+			}
 		</style>
 	</head>
 	<body>
@@ -104,16 +108,16 @@
 		<div style="display: flex; flex-direction: column; align-items: center;">
 			<table style="width: 100%; text-align: center; border-collapse: collapse;">
 			  <tr>
-				<td style="text-align: center;">
-				  <img src="images/task2_1.png" width="400px"/>
+				<td style="text-align: center; width: 33%;">
+				  <img src="images/task2_1.png" style="width: 100%; max-width: 300px;"/>
 				  <figcaption>Sample rate 1 — jagged edges, missing thin corners.</figcaption>
 				</td>
-				<td style="text-align: center;">
-				  <img src="images/task2_4.png" width="400px"/>
+				<td style="text-align: center; width: 33%;">
+				  <img src="images/task2_4.png" style="width: 100%; max-width: 300px;"/>
 				  <figcaption>Sample rate 4 — smoother edges, thin corners partially visible.</figcaption>
 				</td>
-				<td style="text-align: center;">
-				  <img src="images/task2_16.png" width="400px"/>
+				<td style="text-align: center; width: 33%;">
+				  <img src="images/task2_16.png" style="width: 100%; max-width: 300px;"/>
 				  <figcaption>Sample rate 16 — well-antialiased edges, corners smoothly blended.</figcaption>
 				</td>
 			  </tr>
