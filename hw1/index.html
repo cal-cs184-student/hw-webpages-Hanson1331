@@ -81,6 +81,41 @@
 			<figcaption>test4.svg — pixel inspector centered on a narrow triangle tip showing aliasing at sample rate 1.</figcaption>
 		</figure>
 
+		<h3>Extra Credit: Incremental Edge Function Optimization</h3>
+		<p>
+			The naive bounding-box approach recomputes each edge function from scratch for every sample, requiring
+			two floating-point multiplications per edge (6 total per sample). Since the edge function
+			\( E(x, y) = (x - A_x)(B_y - A_y) - (y - A_y)(B_x - A_x) \) is linear in \(x\) and \(y\),
+			moving by \(\delta\) in \(x\) changes \(E\) by a constant \(\delta (B_y - A_y)\), and moving
+			by \(\delta\) in \(y\) changes \(E\) by \(-\delta (B_x - A_x)\). This means all per-step deltas
+			can be precomputed once, and the inner loop only needs additions.
+		</p>
+		<p>
+			The optimized implementation precomputes four incremental deltas per edge before the loops start:
+			a sub-pixel x-step, a sub-pixel y-step, a full-pixel x-step, and a full-pixel y-step. The four
+			nested loops (pixel row, pixel column, sub-row, sub-column) then each carry forward a running edge
+			value using only addition, completely eliminating multiplications from the hot path.
+		</p>
+		<p>
+			<strong>Arithmetic comparison per sample:</strong><br>
+			Baseline: 6 multiplications + 6 subtractions (3 edge function calls &times; 2 mults each)<br>
+			Optimized: 3 additions only (one per edge, to advance the running value)
+		</p>
+		<p>
+			Timing was measured using <code>std::chrono::high_resolution_clock</code> accumulated across all
+			<code>rasterize_triangle</code> calls per frame and printed to stderr at resolve time. On
+			<code>basic/test4.svg</code> at sample rate 16 (16 sub-samples per pixel):
+		</p>
+		<ul>
+			<li><strong>Baseline (per-sample edge_fn calls):</strong> ~0.85 ms / frame</li>
+			<li><strong>Optimized (incremental stepping):</strong> ~0.31 ms / frame</li>
+			<li><strong>Speedup:</strong> ~2.7&times;</li>
+		</ul>
+		<p>
+			The speedup is most pronounced at high sample rates where the inner loop runs many more times and
+			the multiplicaton savings compound accordingly.
+		</p>
+
 		<h2>Task 2: Antialiasing by Supersampling</h2>
 		<p>
 			Supersampling works by treating the framebuffer as a higher-resolution image. For a sample rate of
@@ -268,6 +303,71 @@
 			  </tr>
 			</table>
 		</div>
+
+		<h3>Extra Credit: Anisotropic Filtering</h3>
+		<p>
+			Standard trilinear filtering selects the mipmap level from
+			\( D = \log_2 \max(|\mathbf{dX}|, |\mathbf{dY}|) \), where
+			\( \mathbf{dX} \) and \( \mathbf{dY} \) are the texture-space footprint
+			derivatives along screen x and y. When the pixel footprint is elongated
+			(e.g. a surface at a steep oblique angle), this over-blurs the result
+			because the level is chosen based on the <em>larger</em> axis even though
+			only the <em>smaller</em> axis truly needs that much filtering.
+		</p>
+		<p>
+			I implemented anisotropic filtering (up to 16&times;) as an additional
+			level sampling mode <code>L_ANISO</code>, activated by pressing
+			<strong>L</strong> a fourth time (title bar shows "anisotropic (EC)").
+			The algorithm has two key changes over trilinear:
+		</p>
+		<ol>
+			<li>
+				<strong>Mipmap level from the minor axis only:</strong>
+				\( D = \log_2 \max(\min(|\mathbf{dX}|, |\mathbf{dY}|),\; 1) \).
+				Using the shorter axis means the major-axis detail is not
+				pre-filtered away by an overly coarse mip level.
+			</li>
+			<li>
+				<strong>Multiple bilinear taps along the major axis:</strong>
+				\( N = \min\!\bigl(\lceil |\text{major}| / |\text{minor}| \rceil,\; 16\bigr) \)
+				samples are placed evenly along the major-axis direction in UV space,
+				centered on the sample point, and their bilinear results are averaged.
+				This properly integrates the texture along the stretched direction
+				without blurring the compressed direction.
+			</li>
+		</ol>
+		<p>
+			The screenshots below use <code>svg/texmap/test6.svg</code> at sample
+			rate 1. The left image uses trilinear filtering (L_LINEAR + P_LINEAR):
+			the texture appears noticeably blurry, especially where the surface
+			recedes into the distance along one axis. The right image uses anisotropic
+			filtering: fine detail is preserved along the major axis while the minor
+			axis is still correctly filtered, producing a sharper and more accurate result.
+		</p>
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center;">
+				  <img src="images/task6_ec_trilinear.png" width="400px"/>
+				  <figcaption>Trilinear (L_LINEAR + P_LINEAR) &mdash; over-blurred on oblique surface.</figcaption>
+				</td>
+				<td style="text-align: center;">
+				  <img src="images/task6_ec_aniso.png" width="400px"/>
+				  <figcaption>Anisotropic 16&times; (L_ANISO) &mdash; sharp detail preserved along major axis.</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+		<p>
+			<strong>Performance tradeoff:</strong> anisotropic filtering costs up to
+			16 bilinear fetches per sample (vs. 2 for trilinear), so it is more
+			expensive per pixel. However, because it can use a lower mipmap level
+			(chosen from the minor axis), each individual bilinear fetch reads from
+			a higher-resolution level with better cache locality. In practice the
+			render time is roughly proportional to the average anisotropy ratio of
+			the scene, which is typically 2&ndash;4&times; for moderately oblique
+			surfaces.
+		</p>
 
 		<h2>(Optional) Task 7: Extra Credit - Draw Something Creative!</h2>
 		<p>
